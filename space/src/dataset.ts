@@ -15,13 +15,28 @@ export type HubClient = {
   commitFiles(files: readonly { path: string; content: string }[], title: string): Promise<void>;
 };
 
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    (error as { statusCode?: unknown }).statusCode === 404
+  );
+}
+
 export function createHubClient(datasetRepo: string, accessToken: string): HubClient {
   const repo = { type: "dataset", name: datasetRepo } as const;
   return {
     async listDataFiles(): Promise<string[]> {
       const paths: string[] = [];
-      for await (const entry of listFiles({ repo, accessToken, recursive: true, path: "data" })) {
-        if (entry.type === "file" && entry.path.endsWith(".jsonl")) paths.push(entry.path);
+      try {
+        for await (const entry of listFiles({ repo, accessToken, recursive: true, path: "data" })) {
+          if (entry.type === "file" && entry.path.endsWith(".jsonl")) paths.push(entry.path);
+        }
+      } catch (error) {
+        // A fresh pool has no data/ tree yet; that is a valid empty state.
+        if (isNotFound(error)) return [];
+        throw error;
       }
       return paths;
     },
