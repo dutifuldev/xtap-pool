@@ -26,8 +26,10 @@ this directory, excluding the modifications below.
   sync-now, pause).
 - `tests/pool-sync.test.mjs` — **new**: node --test coverage for the queue,
   flush, backoff and connect flows.
-- `background.js` flush — rebuffers batches when the host rejects or does not
-  respond, not only when the send throws.
+- `background.js` flush — rebuffers batches on explicit host rejection or
+  when no transport accepted the message (native fire-and-forget posts still
+  count as delivered), and persists the local buffer across MV3 service-worker
+  suspensions.
 - `lib/tweet-parser.js` — accepts object-shaped Draft.js `entityMap`s in
   addition to X's array-of-pairs shape (+ regression test).
 - `native-host/xtap_core.py` — all text file handles opened with

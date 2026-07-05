@@ -177,7 +177,17 @@ function senderMatchesPool(senderUrl) {
 }
 
 export async function poolSetConfig({ url, token }) {
-  if (typeof url === 'string' && url) config.poolUrl = url.replace(/\/+$/, '');
+  if (typeof url === 'string' && url) {
+    const normalized = url.replace(/\/+$/, '');
+    if (normalized !== config.poolUrl) {
+      config.poolUrl = normalized;
+      // A token is only valid for the pool that minted it. Keeping the old
+      // one would leak it (and queued captures) to whatever Space the new
+      // URL points at on the next flush.
+      config.poolToken = '';
+      config.poolUsername = '';
+    }
+  }
   if (typeof token === 'string' && token) {
     config.poolToken = token;
     config.poolUsername = '';
@@ -187,7 +197,7 @@ export async function poolSetConfig({ url, token }) {
     poolToken: config.poolToken,
     poolUsername: config.poolUsername,
   });
-  scheduleFlush(0);
+  if (config.poolToken) scheduleFlush(0);
 }
 
 export async function poolTogglePause() {

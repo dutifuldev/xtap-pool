@@ -159,6 +159,18 @@ describe('pause + config + persistence', () => {
     assert.equal(status.connected, true);
   });
 
+  it('clears a stale token when the pool url changes without a replacement', async () => {
+    await poolSetConfig({ url: 'https://a.hf.space' });
+    await poolConnect({ token: 'tok-a', username: 'osolmaz' }, 'https://a.hf.space/connect');
+    assert.equal(poolStatus().connected, true);
+    await poolSetConfig({ url: 'https://b.hf.space' });
+    const status = poolStatus();
+    assert.equal(status.url, 'https://b.hf.space');
+    assert.equal(status.connected, false);
+    assert.equal(status.username, '');
+    assert.equal(storageData.poolToken, '');
+  });
+
   it('initPoolSync restores queue, config and stats from storage', async () => {
     storageData.poolQueue = [tweet('9')];
     storageData.poolToken = 'tok';

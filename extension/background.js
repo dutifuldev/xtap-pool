@@ -51,22 +51,29 @@ function seenIdsStorage() {
 
 async function saveState() {
   const seenData = { seenIds: [...seenIds].slice(-MAX_SEEN_IDS) };
+  // The local-save buffer is persisted too: MV3 can suspend the worker before
+  // the periodic flush timer fires, and small (<BATCH_SIZE) batches would
+  // otherwise exist only in memory and be lost.
+  const bufferData = { localBuffer: buffer };
   if (isDevMode) {
     await Promise.all([
       chrome.storage.session.set(seenData),
-      chrome.storage.local.set({ allTimeCount, captureEnabled }),
+      chrome.storage.local.set({ allTimeCount, captureEnabled, ...bufferData }),
     ]);
   } else {
-    await chrome.storage.local.set({ ...seenData, allTimeCount, captureEnabled });
+    await chrome.storage.local.set({ ...seenData, allTimeCount, captureEnabled, ...bufferData });
   }
 }
 
 async function restoreState() {
   const [seenStored, stored] = await Promise.all([
     seenIdsStorage().get(['seenIds']),
-    chrome.storage.local.get(['allTimeCount', 'captureEnabled', 'outputDir', 'debugLogging', 'verboseLogging']),
+    chrome.storage.local.get(['allTimeCount', 'captureEnabled', 'outputDir', 'debugLogging', 'verboseLogging', 'localBuffer']),
   ]);
   if (seenStored.seenIds) seenIds = new Set(seenStored.seenIds);
+  if (Array.isArray(stored.localBuffer) && stored.localBuffer.length > 0) {
+    buffer.push(...stored.localBuffer);
+  }
   if (typeof stored.allTimeCount === 'number') allTimeCount = stored.allTimeCount;
   if (typeof stored.captureEnabled === 'boolean') captureEnabled = stored.captureEnabled;
   if (typeof stored.outputDir === 'string') outputDir = stored.outputDir;
@@ -328,15 +335,19 @@ async function flush() {
 
     try {
       const resp = await sendToHost(message);
-      if (!resp || !resp.ok) {
-        // Rebuffer on rejection/no-response too, not just on thrown errors —
-        // otherwise a down daemon or a transient write error drops the batch.
-        console.error('[xTap] Host rejected tweets, buffering back:', resp ? resp.error : 'no response');
+      // Native messaging is fire-and-forget: a null response with a live
+      // port means the batch was posted. Rebuffer only on an explicit
+      // rejection or when no transport accepted the message at all.
+      const nativePosted = resp === null && nativePort;
+      if (!nativePosted && (!resp || !resp.ok)) {
+        console.error('[xTap] Host rejected tweets, buffering back:', resp ? resp.error : 'no transport');
         buffer.unshift(...batch);
       }
+      saveState();
     } catch (e) {
       console.error('[xTap] Send failed, buffering tweets back:', e);
       buffer.unshift(...batch);
+      saveState();
     }
   }
 
