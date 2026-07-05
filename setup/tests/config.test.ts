@@ -7,6 +7,7 @@ import {
   spacePublicUrl,
   tokenSettingsUrl,
   usersValue,
+  validateNamespace,
   validateRepoId,
   validateUserList,
 } from "../src/config.js";
@@ -27,6 +28,8 @@ describe("setup config helpers", () => {
   });
 
   it("validates repo ids and user lists", () => {
+    expect(validateNamespace("dutifuldev")).toBeUndefined();
+    expect(validateNamespace("bad namespace")).toContain("username or organization");
     expect(validateRepoId("alice/xtap-pool")).toBeUndefined();
     expect(validateRepoId("xtap-pool")).toContain("owner/name");
     expect(validateUserList("alice,bob")).toBeUndefined();

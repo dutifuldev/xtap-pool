@@ -15,9 +15,11 @@ import type { SetupConfig } from "./config.js";
 import {
   defaultSetupConfig,
   normalizeUsers,
+  repoInNamespace,
   spacePublicUrl,
   tokenSettingsUrl,
   usersValue,
+  validateNamespace,
   validateRepoId,
   validateUserList,
 } from "./config.js";
@@ -51,11 +53,19 @@ async function activeHfToken(): Promise<string> {
 
 async function promptConfig(username: string): Promise<SetupConfig> {
   const defaults = defaultSetupConfig(username);
-  const namespace = await promptText("Hugging Face namespace", defaults.namespace);
-  const spaceRepo = await promptText("Space repo", defaults.spaceRepo, validateRepoId);
+  const namespace = await promptText(
+    "Hugging Face namespace",
+    defaults.namespace,
+    validateNamespace,
+  );
+  const spaceRepo = await promptText(
+    "Space repo",
+    repoInNamespace(namespace, "xtap-pool"),
+    validateRepoId,
+  );
   const datasetRepo = await promptText(
     "Private dataset repo",
-    defaults.datasetRepo,
+    repoInNamespace(namespace, "xtap-pool-data"),
     validateRepoId,
   );
   const allowed = await promptText(

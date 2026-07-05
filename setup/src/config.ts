@@ -40,6 +40,10 @@ export function validateRepoId(value: string): string | undefined {
   return REPO_ID.test(value) ? undefined : "Use owner/name, for example osolmaz/xtap-pool.";
 }
 
+export function validateNamespace(value: string): string | undefined {
+  return USERNAME.test(value) ? undefined : "Use a Hugging Face username or organization name.";
+}
+
 export function validateUserList(value: string): string | undefined {
   const users = normalizeUsers(value);
   if (users.length === 0) return "Enter at least one Hugging Face username.";
