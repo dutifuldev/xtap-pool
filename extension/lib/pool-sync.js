@@ -13,7 +13,7 @@ const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 15 * 60_000;
 
 // Set at build/packaging time so friends get a working default without setup.
-export const DEFAULT_POOL_URL = 'https://dutifuldev-xtap-pool.hf.space';
+export const DEFAULT_POOL_URL = 'https://osolmaz-xtap-pool.hf.space';
 
 let queue = [];
 let config = {

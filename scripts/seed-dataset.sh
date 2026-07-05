@@ -7,10 +7,10 @@
 # legacy lines without a contributed_by stamp.
 #
 # Usage: scripts/seed-dataset.sh <dataset-repo> <hf-username> <source-dir>
-#   e.g. scripts/seed-dataset.sh dutifuldev/xtap-pool-data osolmaz ~/xtap-store/data/tweets
+#   e.g. scripts/seed-dataset.sh osolmaz/xtap-pool-data osolmaz ~/xtap-store/data/tweets
 set -euo pipefail
 
-DATASET_REPO="${1:?dataset repo, e.g. dutifuldev/xtap-pool-data}"
+DATASET_REPO="${1:?dataset repo, e.g. osolmaz/xtap-pool-data}"
 USERNAME="${2:?hf username the seed data belongs to}"
 SOURCE_DIR="${3:?source dir, e.g. ~/xtap-store/data/tweets}"
 
