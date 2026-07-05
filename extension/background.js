@@ -328,8 +328,11 @@ async function flush() {
 
     try {
       const resp = await sendToHost(message);
-      if (resp && !resp.ok) {
-        console.error('[xTap] Host rejected tweets:', resp.error);
+      if (!resp || !resp.ok) {
+        // Rebuffer on rejection/no-response too, not just on thrown errors —
+        // otherwise a down daemon or a transient write error drops the batch.
+        console.error('[xTap] Host rejected tweets, buffering back:', resp ? resp.error : 'no response');
+        buffer.unshift(...batch);
       }
     } catch (e) {
       console.error('[xTap] Send failed, buffering tweets back:', e);

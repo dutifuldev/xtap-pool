@@ -140,6 +140,16 @@ describe("query", () => {
   it("ignores an invalid cursor", () => {
     expect(store.query({ cursor: "!!not-a-cursor!!" }).records.length).toBeGreaterThan(0);
   });
+
+  it("keeps every contributor copy across page boundaries when dedup is off", () => {
+    const first = store.query({ dedup: false, limit: 2 });
+    expect(first.records).toHaveLength(2);
+    const second = store.query({ dedup: false, limit: 2, cursor: first.nextCursor ?? "" });
+    const all = [...first.records, ...second.records].map(
+      (record) => `${record.tweet.id}:${record.tweet.contributed_by}`,
+    );
+    expect(all).toEqual(["3:alice", "2:osolmaz", "2:alice", "1:osolmaz"]);
+  });
 });
 
 describe("contributors + cursors", () => {

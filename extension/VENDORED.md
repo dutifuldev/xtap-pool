@@ -26,4 +26,10 @@ this directory, excluding the modifications below.
   sync-now, pause).
 - `tests/pool-sync.test.mjs` — **new**: node --test coverage for the queue,
   flush, backoff and connect flows.
+- `background.js` flush — rebuffers batches when the host rejects or does not
+  respond, not only when the send throws.
+- `lib/tweet-parser.js` — accepts object-shaped Draft.js `entityMap`s in
+  addition to X's array-of-pairs shape (+ regression test).
+- `native-host/xtap_core.py` — all text file handles opened with
+  `encoding="utf-8"` so emoji/CJK tweets save on non-UTF-8 locales.
 - Removed upstream `AGENTS.md` / `CLAUDE.md` (superseded by the repo root's).

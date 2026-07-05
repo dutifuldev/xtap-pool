@@ -366,12 +366,17 @@ export function extractArticle(raw) {
     });
   }
 
-  // Build entity key → mediaId from entityMap
+  // Build entity key → mediaId from entityMap. X emits an array of
+  // {key, value} pairs, but standard Draft.js raw content uses an object
+  // keyed by entity id — accept both shapes.
+  const entityMapEntries = Array.isArray(entityMap)
+    ? entityMap.map((ent) => [ent.key, ent.value])
+    : Object.entries(entityMap);
   const entityMediaId = new Map();
-  for (const ent of entityMap) {
-    const items = ent.value?.data?.mediaItems || [];
+  for (const [key, value] of entityMapEntries) {
+    const items = value?.data?.mediaItems || [];
     if (items.length > 0) {
-      entityMediaId.set(String(ent.key), items[0].mediaId);
+      entityMediaId.set(String(key), items[0].mediaId);
     }
   }
 

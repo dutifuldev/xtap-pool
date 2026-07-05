@@ -502,6 +502,35 @@ describe('extractArticle', () => {
     assert.equal(article.media[0].width, 1200);
     assert.equal(article.media[0].height, 800);
   });
+
+  it('accepts an object-shaped Draft.js entityMap', () => {
+    const raw = {
+      rest_id: '501',
+      legacy: { id_str: '501' },
+      article: {
+        article_results: {
+          result: {
+            title: 'Object Map',
+            content_state: {
+              blocks: [{ text: ' ', type: 'atomic', entityRanges: [{ key: 0 }] }],
+              entityMap: {
+                0: { data: { mediaItems: [{ mediaId: 'mid2' }] } },
+              },
+            },
+            media_entities: [
+              {
+                media_id: 'mid2',
+                media_info: { original_img_url: 'https://pbs.twimg.com/media/pic.png' },
+              },
+            ],
+          },
+        },
+      },
+    };
+    const article = extractArticle(raw);
+    assert.equal(article.text, '![pic.png](media/501/pic.png)');
+    assert.equal(article.media[0].id, 'mid2');
+  });
 });
 
 function makeArticleRaw(blocks) {

@@ -40,6 +40,7 @@ type TweetRow = {
   json: string;
   sort_ts: string;
   id: string;
+  contributed_by: string;
   contributors: string;
 };
 
@@ -48,21 +49,29 @@ type ExistingRow = { captured_at: string };
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
-export function encodeCursor(sortTs: string, id: string): string {
-  return Buffer.from(JSON.stringify([sortTs, id])).toString("base64url");
+type Cursor = { sortTs: string; id: string; contributedBy?: string };
+
+/**
+ * Keyset cursor. Deduped pages are keyed by (sort_ts, id); non-deduped pages
+ * additionally carry contributed_by, since several contributors can hold the
+ * same tweet id and a page boundary must not skip the remaining copies.
+ */
+export function encodeCursor(sortTs: string, id: string, contributedBy?: string): string {
+  const parts = contributedBy === undefined ? [sortTs, id] : [sortTs, id, contributedBy];
+  return Buffer.from(JSON.stringify(parts)).toString("base64url");
 }
 
-export function decodeCursor(cursor: string): { sortTs: string; id: string } | undefined {
+export function decodeCursor(cursor: string): Cursor | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
   } catch {
     return undefined;
   }
-  if (!Array.isArray(parsed) || parsed.length !== 2) return undefined;
-  const [sortTs, id] = parsed as [unknown, unknown];
-  if (typeof sortTs !== "string" || typeof id !== "string") return undefined;
-  return { sortTs, id };
+  if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 3) return undefined;
+  if (!parsed.every((part) => typeof part === "string")) return undefined;
+  const [sortTs, id, contributedBy] = parsed as [string, string, string?];
+  return contributedBy === undefined ? { sortTs, id } : { sortTs, id, contributedBy };
 }
 
 /** In-process index over the pooled tweets; a cache of the dataset repo, rebuilt on boot. */
@@ -147,11 +156,11 @@ export class TweetStore {
 
   query(query: TweetQuery): TweetPage {
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+    const dedup = query.dedup === true;
     const { whereSql, params } = buildFilters(query);
-    const rows =
-      query.dedup === true
-        ? this.queryDeduped(whereSql, params, query.cursor, limit)
-        : this.queryPlain(whereSql, params, query.cursor, limit);
+    const rows = dedup
+      ? this.queryDeduped(whereSql, params, query.cursor, limit)
+      : this.queryPlain(whereSql, params, query.cursor, limit);
     const records = rows.slice(0, limit).map((row): TweetRecord => ({
       tweet: JSON.parse(row.json) as PooledTweet,
       contributors: [...new Set(row.contributors.split(","))].sort(),
@@ -159,7 +168,9 @@ export class TweetStore {
     const page: TweetPage = { records };
     const lastRow = rows.length > limit ? rows[limit - 1] : undefined;
     if (lastRow !== undefined) {
-      page.nextCursor = encodeCursor(lastRow.sort_ts, lastRow.id);
+      page.nextCursor = dedup
+        ? encodeCursor(lastRow.sort_ts, lastRow.id)
+        : encodeCursor(lastRow.sort_ts, lastRow.id, lastRow.contributed_by);
     }
     return page;
   }
@@ -170,12 +181,12 @@ export class TweetStore {
     cursor: string | undefined,
     limit: number,
   ): TweetRow[] {
-    const { cursorSql, cursorParams } = cursorClause(cursor);
+    const { cursorSql, cursorParams } = cursorClause(cursor, true);
     const sql = `
-      SELECT json, sort_ts, id, contributed_by AS contributors
+      SELECT json, sort_ts, id, contributed_by, contributed_by AS contributors
       FROM tweets
       WHERE ${whereSql} ${cursorSql}
-      ORDER BY sort_ts DESC, id DESC
+      ORDER BY sort_ts DESC, id DESC, contributed_by DESC
       LIMIT ?
     `;
     return this.db.prepare(sql).all(...params, ...cursorParams, limit + 1) as TweetRow[];
@@ -187,9 +198,9 @@ export class TweetStore {
     cursor: string | undefined,
     limit: number,
   ): TweetRow[] {
-    const { cursorSql, cursorParams } = cursorClause(cursor);
+    const { cursorSql, cursorParams } = cursorClause(cursor, false);
     const sql = `
-      SELECT json, sort_ts, id, contributors
+      SELECT json, sort_ts, id, '' AS contributed_by, contributors
       FROM (
         SELECT
           json, sort_ts, id,
@@ -282,15 +293,32 @@ function buildFilters(query: TweetQuery): { whereSql: string; params: unknown[] 
   return { whereSql, params: filters.flatMap((filter) => [...filter.values]) };
 }
 
-function cursorClause(cursor: string | undefined): {
+function cursorClause(
+  cursor: string | undefined,
+  perContributor: boolean,
+): {
   cursorSql: string;
   cursorParams: unknown[];
 } {
   if (cursor === undefined) return { cursorSql: "", cursorParams: [] };
   const decoded = decodeCursor(cursor);
   if (decoded === undefined) return { cursorSql: "", cursorParams: [] };
+  if (!perContributor || decoded.contributedBy === undefined) {
+    return {
+      cursorSql: "AND (sort_ts < ? OR (sort_ts = ? AND id < ?))",
+      cursorParams: [decoded.sortTs, decoded.sortTs, decoded.id],
+    };
+  }
   return {
-    cursorSql: "AND (sort_ts < ? OR (sort_ts = ? AND id < ?))",
-    cursorParams: [decoded.sortTs, decoded.sortTs, decoded.id],
+    cursorSql:
+      "AND (sort_ts < ? OR (sort_ts = ? AND id < ?) OR (sort_ts = ? AND id = ? AND contributed_by < ?))",
+    cursorParams: [
+      decoded.sortTs,
+      decoded.sortTs,
+      decoded.id,
+      decoded.sortTs,
+      decoded.id,
+      decoded.contributedBy,
+    ],
   };
 }

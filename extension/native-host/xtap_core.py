@@ -19,7 +19,7 @@ def load_seen_ids(out_dir):
     """Build a set of tweet IDs from all existing JSONL files in the output directory."""
     seen = set()
     for path in glob.glob(os.path.join(out_dir, 'tweets-*.jsonl')):
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -54,7 +54,7 @@ def write_tweets(tweets, out_dir, seen_ids):
     out_file = os.path.join(out_dir, f'tweets-{date.today().isoformat()}.jsonl')
     count = 0
     dupes = 0
-    with open(out_file, 'a') as f:
+    with open(out_file, 'a', encoding='utf-8') as f:
         for tweet in tweets:
             tid = tweet.get('id')
             if tid and tid in seen_ids and not tweet.get('is_article'):
@@ -70,7 +70,7 @@ def write_tweets(tweets, out_dir, seen_ids):
 def write_log(lines, out_dir):
     """Append debug log lines to daily log file. Returns logged count."""
     log_file = os.path.join(out_dir, f'debug-{date.today().isoformat()}.log')
-    with open(log_file, 'a') as f:
+    with open(log_file, 'a', encoding='utf-8') as f:
         for line in lines:
             f.write(line + '\n')
     return len(lines)
@@ -79,7 +79,7 @@ def write_log(lines, out_dir):
 def write_dump(filename, content, out_dir):
     """Write a raw JSON dump file for discovery/debugging."""
     dump_file = os.path.join(out_dir, filename)
-    with open(dump_file, 'w') as f:
+    with open(dump_file, 'w', encoding='utf-8') as f:
         f.write(content)
     return dump_file
 
@@ -88,7 +88,7 @@ def test_path(out_dir):
     """Test that we can write to the output directory. Raises on failure."""
     os.makedirs(out_dir, exist_ok=True)
     test_file = os.path.join(out_dir, '.xtap-write-test')
-    with open(test_file, 'w') as f:
+    with open(test_file, 'w', encoding='utf-8') as f:
         f.write('ok')
     os.remove(test_file)
 
