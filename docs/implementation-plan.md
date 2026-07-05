@@ -157,15 +157,15 @@ power use; not required for any flow.
 
 Endpoints:
 
-| Route | Auth | Purpose |
-|---|---|---|
-| `GET /` + static | session | serves built explorer |
-| `GET /oauth/login` → `/oauth/callback` | — | HF OIDC code flow, sets session cookie, enforces `ALLOWED_USERS` |
-| `GET /connect` | session | mints + renders pool token for extension pickup |
-| `POST /api/ingest` | pool token | validate (zod), stamp, dedup, persist |
-| `GET /api/tweets` | session | filters: `contributors`, `author`, `q` (FTS), `since`/`until`, `has_media`, `is_article`, `dedup=true`, cursor pagination |
-| `GET /api/contributors` | session | per-user counts, last sync |
-| `GET /healthz` | — | liveness |
+| Route                                  | Auth       | Purpose                                                                                                                   |
+| -------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET /` + static                       | session    | serves built explorer                                                                                                     |
+| `GET /oauth/login` → `/oauth/callback` | —          | HF OIDC code flow, sets session cookie, enforces `ALLOWED_USERS`                                                          |
+| `GET /connect`                         | session    | mints + renders pool token for extension pickup                                                                           |
+| `POST /api/ingest`                     | pool token | validate (zod), stamp, dedup, persist                                                                                     |
+| `GET /api/tweets`                      | session    | filters: `contributors`, `author`, `q` (FTS), `since`/`until`, `has_media`, `is_article`, `dedup=true`, cursor pagination |
+| `GET /api/contributors`                | session    | per-user counts, last sync                                                                                                |
+| `GET /healthz`                         | —          | liveness                                                                                                                  |
 
 Storage engine inside the Space: **SQLite** (`better-sqlite3`) on ephemeral
 disk + FTS5 for text search. Boot: download dataset snapshot (`@huggingface/hub`)
@@ -262,7 +262,7 @@ them is covered by tests.
 - **Upstream xTap drift**: vendored at a SHA with `VENDORED.md`; re-sync is
   a deliberate manual step. Long-term option: upstream the sync feature into
   xTap and shrink this vendor copy.
-- **Token leak blast radius**: a pool token only allows *adding* tweets as
+- **Token leak blast radius**: a pool token only allows _adding_ tweets as
   that user; dataset write token never leaves the Space; both rotate via
   Space secrets.
 - **Ephemeral disk**: no unpersisted state by construction (commit per
