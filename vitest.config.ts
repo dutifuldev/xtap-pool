@@ -1,6 +1,11 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@xtap-pool/shared": new URL("./shared/src/index.ts", import.meta.url).pathname,
+    },
+  },
   test: {
     projects: ["shared/vitest.config.ts", "space/vitest.config.ts", "explorer/vitest.config.ts"],
     coverage: {
