@@ -24,6 +24,15 @@ function isNotFound(error: unknown): boolean {
   );
 }
 
+function isMissingDatasetFile(error: unknown, path: string): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    isNotFound(error) ||
+    message.includes(`missing: ${path}`) ||
+    message.includes(`dataset file not found: ${path}`)
+  );
+}
+
 export function createHubClient(datasetRepo: string, accessToken: string): HubClient {
   const repo = { type: "dataset", name: datasetRepo } as const;
   return {
@@ -106,7 +115,7 @@ export class DatasetMirror {
     try {
       return await this.hub.downloadFile(path);
     } catch (error) {
-      if (isNotFound(error) || String(error).includes(`missing: ${path}`)) return undefined;
+      if (isMissingDatasetFile(error, path)) return undefined;
       throw error;
     }
   }

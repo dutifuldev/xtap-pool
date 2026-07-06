@@ -34,6 +34,7 @@ export class PoolMembership {
   private readonly bootstrapAdmins: readonly string[];
   private source: PoolSnapshot["source"];
   private configError: string | undefined;
+  private mutationTail: Promise<void> = Promise.resolve();
 
   private constructor(
     private readonly options: PoolMembershipOptions,
@@ -89,51 +90,66 @@ export class PoolMembership {
   }
 
   async addMember(actor: string, username: string): Promise<PoolSnapshot> {
-    const user = normalizeUsername(username);
-    if (this.memberSet().has(user)) return this.snapshot();
-    this.config = {
-      ...this.config,
-      members: [...normalizeUsers(this.config.members), user].sort(),
-    };
-    await this.commit(actor, `config: add pool member ${user}`);
-    return this.snapshot();
+    return this.enqueueMutation(async () => {
+      const user = normalizeUsername(username);
+      if (this.memberSet().has(user)) return this.snapshot();
+      const nextConfig = {
+        ...this.config,
+        members: [...normalizeUsers(this.config.members), user].sort(),
+      };
+      await this.commit(nextConfig, actor, `config: add pool member ${user}`);
+      return this.snapshot();
+    });
   }
 
   async removeMember(actor: string, username: string): Promise<PoolSnapshot> {
-    const user = normalizeUsername(username);
-    if (this.adminSet().has(user)) throw new Error(`@${user} is an admin; demote before removing`);
-    const nextMembers = normalizeUsers(this.config.members).filter((member) => member !== user);
-    if (nextMembers.length === this.config.members.length) return this.snapshot();
-    this.config = { ...this.config, members: nextMembers };
-    await this.commit(actor, `config: remove pool member ${user}`);
-    return this.snapshot();
+    return this.enqueueMutation(async () => {
+      const user = normalizeUsername(username);
+      if (this.adminSet().has(user))
+        throw new Error(`@${user} is an admin; demote before removing`);
+      const nextMembers = normalizeUsers(this.config.members).filter((member) => member !== user);
+      if (nextMembers.length === this.config.members.length) return this.snapshot();
+      await this.commit(
+        { ...this.config, members: nextMembers },
+        actor,
+        `config: remove pool member ${user}`,
+      );
+      return this.snapshot();
+    });
   }
 
   async addAdmin(actor: string, username: string): Promise<PoolSnapshot> {
-    const user = normalizeUsername(username);
-    if (this.adminSet().has(user)) return this.snapshot();
-    this.config = {
-      ...this.config,
-      admins: [...normalizeUsers(this.config.admins), user].sort(),
-      members: [...new Set([...normalizeUsers(this.config.members), user])].sort(),
-    };
-    await this.commit(actor, `config: add pool admin ${user}`);
-    return this.snapshot();
+    return this.enqueueMutation(async () => {
+      const user = normalizeUsername(username);
+      if (this.adminSet().has(user)) return this.snapshot();
+      const nextConfig = {
+        ...this.config,
+        admins: [...normalizeUsers(this.config.admins), user].sort(),
+        members: [...new Set([...normalizeUsers(this.config.members), user])].sort(),
+      };
+      await this.commit(nextConfig, actor, `config: add pool admin ${user}`);
+      return this.snapshot();
+    });
   }
 
   async removeAdmin(actor: string, username: string): Promise<PoolSnapshot> {
-    const user = normalizeUsername(username);
-    if (this.bootstrapAdmins.includes(user)) {
-      throw new Error(`@${user} is a bootstrap admin; change POOL_ADMINS to demote`);
-    }
-    const nextAdmins = normalizeUsers(this.config.admins).filter((admin) => admin !== user);
-    if (nextAdmins.length === this.config.admins.length) return this.snapshot();
-    if (new Set([...nextAdmins, ...this.bootstrapAdmins]).size === 0) {
-      throw new Error("pool must keep at least one admin");
-    }
-    this.config = { ...this.config, admins: nextAdmins };
-    await this.commit(actor, `config: remove pool admin ${user}`);
-    return this.snapshot();
+    return this.enqueueMutation(async () => {
+      const user = normalizeUsername(username);
+      if (this.bootstrapAdmins.includes(user)) {
+        throw new Error(`@${user} is a bootstrap admin; change POOL_ADMINS to demote`);
+      }
+      const nextAdmins = normalizeUsers(this.config.admins).filter((admin) => admin !== user);
+      if (nextAdmins.length === this.config.admins.length) return this.snapshot();
+      if (new Set([...nextAdmins, ...this.bootstrapAdmins]).size === 0) {
+        throw new Error("pool must keep at least one admin");
+      }
+      await this.commit(
+        { ...this.config, admins: nextAdmins },
+        actor,
+        `config: remove pool admin ${user}`,
+      );
+      return this.snapshot();
+    });
   }
 
   private adminSet(): Set<string> {
@@ -144,17 +160,27 @@ export class PoolMembership {
     return new Set([...normalizeUsers(this.config.members), ...this.adminSet()]);
   }
 
-  private async commit(actor: string, title: string): Promise<void> {
-    this.config = normalizeConfig({
-      ...this.config,
+  private async enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutationTail.then(operation);
+    this.mutationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async commit(nextConfig: PoolConfig, actor: string, title: string): Promise<void> {
+    const committedConfig = normalizeConfig({
+      ...nextConfig,
       updated_at: this.options.now().toISOString(),
       updated_by: normalizeUsername(actor),
     });
     await this.options.mirror.writeTextAndCommit(
       POOL_CONFIG_PATH,
-      `${JSON.stringify(this.config, null, 2)}\n`,
+      `${JSON.stringify(committedConfig, null, 2)}\n`,
       title,
     );
+    this.config = committedConfig;
     this.source = "dataset";
     this.configError = undefined;
   }

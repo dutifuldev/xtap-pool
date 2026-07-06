@@ -83,6 +83,26 @@ describe("PoolMembership", () => {
     expect(hub.commits[0]?.title).toBe("config: add pool member alice");
   });
 
+  it("leaves membership unchanged when a config commit fails", async () => {
+    const membership = await PoolMembership.load({
+      mirror,
+      bootstrapMembers: ["osolmaz"],
+      bootstrapAdmins: ["osolmaz"],
+      now: () => NOW,
+    });
+    await membership.addMember("osolmaz", "alice");
+
+    hub.failNextCommit = true;
+    await expect(membership.addMember("osolmaz", "bob")).rejects.toThrow("hub unavailable");
+    expect(membership.isMember("bob")).toBe(false);
+    expect(membership.snapshot().members).toEqual(["alice", "osolmaz"]);
+
+    hub.failNextCommit = true;
+    await expect(membership.removeMember("osolmaz", "alice")).rejects.toThrow("hub unavailable");
+    expect(membership.isMember("alice")).toBe(true);
+    expect(membership.snapshot().members).toEqual(["alice", "osolmaz"]);
+  });
+
   it("falls back to bootstrap admins when config is invalid", async () => {
     hub.files.set("config/pool.json", "not json");
     const membership = await PoolMembership.load({
