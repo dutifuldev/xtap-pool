@@ -39,6 +39,7 @@ export async function configureSpace(client: HubClient, config: SetupConfig): Pr
     "ALLOWED_USERS",
     usersValue(config.allowedUsers),
   );
+  await setSpaceVariable(client, config.spaceRepo, "POOL_ADMINS", usersValue(config.poolAdmins));
   if (!variables.has("SECRETS_INITIALIZED")) {
     await setSpaceSecret(client, config.spaceRepo, "POOL_SIGNING_SECRET", randomSecret());
     await setSpaceSecret(client, config.spaceRepo, "SESSION_SECRET", randomSecret());

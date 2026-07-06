@@ -8,6 +8,7 @@ const baseEnv = {
   POOL_SIGNING_SECRET: "pool-secret-0123456789abcdef0123456789abcdef",
   SESSION_SECRET: "session-secret-0123456789abcdef0123456789ab",
   ALLOWED_USERS: "osolmaz, alice ,bob,",
+  POOL_ADMINS: "osolmaz",
   OAUTH_CLIENT_ID: "cid",
   OAUTH_CLIENT_SECRET: "csecret",
   SPACE_HOST: "dutifuldev-xtap-pool.hf.space",
@@ -18,8 +19,14 @@ describe("loadConfig", () => {
     const config = loadConfig(baseEnv);
     expect(config.port).toBe(7860);
     expect(config.allowedUsers).toEqual(["osolmaz", "alice", "bob"]);
+    expect(config.poolAdmins).toEqual(["osolmaz"]);
     expect(config.publicUrl).toBe("https://dutifuldev-xtap-pool.hf.space");
     expect(config.openidProviderUrl).toBe("https://huggingface.co");
+  });
+
+  it("defaults pool admins to the first allowed user", () => {
+    const config = loadConfig({ ...baseEnv, POOL_ADMINS: "" });
+    expect(config.poolAdmins).toEqual(["osolmaz"]);
   });
 
   it("keeps explicit scheme and strips trailing slashes", () => {

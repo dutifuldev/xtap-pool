@@ -112,7 +112,7 @@ Target friend onboarding: **install extension, one OAuth authorize, done.**
    **"Sign in with Hugging Face"** (one click if already logged into HF).
    Everything beyond the sign-in page is enforced in-app by the allowlist;
    the dataset repo stays private.
-4. `/connect` verifies the username against the `ALLOWED_USERS` allowlist,
+4. `/connect` verifies the username against the pool membership config,
    mints a **pool token**, and renders it in the page DOM.
 5. A content script (matching the Space origin only) picks the token up
    automatically and stores it in `chrome.storage.local`. Popup flips to
@@ -163,7 +163,7 @@ Endpoints:
 | Route                                  | Auth       | Purpose                                                                                                                   |
 | -------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `GET /` + static                       | session    | serves built explorer                                                                                                     |
-| `GET /oauth/login` → `/oauth/callback` | —          | HF OIDC code flow, sets session cookie, enforces `ALLOWED_USERS`                                                          |
+| `GET /oauth/login` → `/oauth/callback` | —          | HF OIDC code flow, sets session cookie, enforces pool membership                                                          |
 | `GET /connect`                         | session    | mints + renders pool token for extension pickup                                                                           |
 | `POST /api/ingest`                     | pool token | validate (zod), stamp, dedup, persist                                                                                     |
 | `GET /api/tweets`                      | session    | filters: `contributors`, `author`, `q` (FTS), `since`/`until`, `has_media`, `is_article`, `dedup=true`, cursor pagination |
@@ -179,8 +179,11 @@ buffering; ephemeral disk must never hold unpersisted data). Commits use
 through a single writer queue.
 
 Config via Space secrets/variables: `HF_TOKEN` (fine-grained, read/write on
-the one dataset repo), `POOL_SIGNING_SECRET`, `SESSION_SECRET`, `ALLOWED_USERS`
-(comma-separated HF usernames), `DATASET_REPO`.
+the one dataset repo), `POOL_SIGNING_SECRET`, `SESSION_SECRET`,
+`ALLOWED_USERS` (initial comma-separated HF usernames), `POOL_ADMINS`
+(bootstrap admins), `DATASET_REPO`. After bootstrap, durable pool membership
+lives in `config/pool.json` in the private dataset repo and is managed from the
+Space Admin tab.
 
 README metadata: `sdk: docker`, `hf_oauth: true`, scopes `openid profile`.
 

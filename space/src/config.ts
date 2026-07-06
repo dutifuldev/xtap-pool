@@ -8,6 +8,7 @@ const configSchema = z.object({
   POOL_SIGNING_SECRET: z.string().min(32),
   SESSION_SECRET: z.string().min(32),
   ALLOWED_USERS: z.string().min(1),
+  POOL_ADMINS: z.string().default(""),
   OAUTH_CLIENT_ID: z.string().min(1),
   OAUTH_CLIENT_SECRET: z.string().min(1),
   OPENID_PROVIDER_URL: z.string().default("https://huggingface.co"),
@@ -23,6 +24,7 @@ export type SpaceConfig = {
   poolSigningSecret: string;
   sessionSecret: string;
   allowedUsers: readonly string[];
+  poolAdmins: readonly string[];
   oauthClientId: string;
   oauthClientSecret: string;
   openidProviderUrl: string;
@@ -35,6 +37,8 @@ export type SpaceConfig = {
 export function loadConfig(env: Record<string, string | undefined>): SpaceConfig {
   const parsed = configSchema.parse(env);
   const host = parsed.SPACE_HOST.replace(/\/+$/, "");
+  const allowedUsers = users(parsed.ALLOWED_USERS);
+  const poolAdmins = users(parsed.POOL_ADMINS);
   return {
     port: parsed.PORT,
     dataDir: parsed.DATA_DIR,
@@ -42,13 +46,19 @@ export function loadConfig(env: Record<string, string | undefined>): SpaceConfig
     hfToken: parsed.HF_TOKEN,
     poolSigningSecret: parsed.POOL_SIGNING_SECRET,
     sessionSecret: parsed.SESSION_SECRET,
-    allowedUsers: parsed.ALLOWED_USERS.split(",")
-      .map((user) => user.trim())
-      .filter((user) => user.length > 0),
+    allowedUsers,
+    poolAdmins: poolAdmins.length > 0 ? poolAdmins : allowedUsers.slice(0, 1),
     oauthClientId: parsed.OAUTH_CLIENT_ID,
     oauthClientSecret: parsed.OAUTH_CLIENT_SECRET,
     openidProviderUrl: parsed.OPENID_PROVIDER_URL.replace(/\/+$/, ""),
     publicUrl: host.startsWith("http") ? host : `https://${host}`,
     staticRoot: parsed.STATIC_ROOT,
   };
+}
+
+function users(value: string): string[] {
+  return value
+    .split(",")
+    .map((user) => user.trim())
+    .filter((user) => user.length > 0);
 }

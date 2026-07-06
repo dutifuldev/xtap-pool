@@ -10,6 +10,7 @@ import { renderConnectPage } from "./connect-page.js";
 import type { SpaceConfig } from "./config.js";
 import { authorizeUrl, exchangeCodeForUsername } from "./oauth.js";
 import type { IngestOutcome } from "./ingest.js";
+import type { PoolMembership } from "./membership.js";
 import { mintPoolToken, verifyPoolToken } from "./pool-token.js";
 import type { TweetStore, TweetQuery } from "./store.js";
 
@@ -21,6 +22,7 @@ const POOL_TOKEN_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 export type AppDeps = {
   config: SpaceConfig;
   store: TweetStore;
+  membership: PoolMembership;
   ingest: (username: string, payload: unknown) => Promise<IngestOutcome>;
   now?: () => Date;
   oauthFetch?: typeof fetch;
@@ -63,23 +65,28 @@ function toTweetQuery(raw: z.infer<typeof tweetsQuerySchema>): TweetQuery {
 }
 
 export function createApp(deps: AppDeps): Hono {
-  const { config, store } = deps;
+  const { config, store, membership } = deps;
   const now = deps.now ?? ((): Date => new Date());
-  const isAllowed = (username: string): boolean =>
-    config.allowedUsers.some((user) => user.toLowerCase() === username.toLowerCase());
 
   const sessionUser = (c: Context): string | undefined => {
     const cookie = getCookie(c, SESSION_COOKIE);
     if (cookie === undefined) return undefined;
     const verified = verifyPoolToken(config.sessionSecret, cookie, now());
-    return verified.ok && isAllowed(verified.username) ? verified.username : undefined;
+    return verified.ok && membership.isMember(verified.username) ? verified.username : undefined;
   };
 
   const bearerUser = (c: Context): string | undefined => {
     const header = c.req.header("authorization");
     if (header?.toLowerCase().startsWith("bearer ") !== true) return undefined;
     const verified = verifyPoolToken(config.poolSigningSecret, header.slice(7).trim(), now());
-    return verified.ok && isAllowed(verified.username) ? verified.username : undefined;
+    return verified.ok && membership.isMember(verified.username) ? verified.username : undefined;
+  };
+
+  const adminUser = (c: Context): string | Response => {
+    const username = sessionUser(c);
+    if (username === undefined) return c.json({ error: "unauthenticated" }, 401);
+    if (!membership.isAdmin(username)) return c.json({ error: "admin access required" }, 403);
+    return username;
   };
 
   const app = new Hono();
@@ -130,7 +137,7 @@ export function createApp(deps: AppDeps): Hono {
     };
     const username = await exchangeCodeForUsername(settings, code);
     if (username === undefined) return c.text("oauth exchange failed", 401);
-    if (!isAllowed(username)) {
+    if (!membership.isMember(username)) {
       return c.text(`@${username} is not on this pool's allowlist`, 403);
     }
     const session = mintPoolToken(
@@ -182,7 +189,7 @@ export function createApp(deps: AppDeps): Hono {
   app.get("/api/me", (c) => {
     const username = bearerUser(c) ?? sessionUser(c);
     if (username === undefined) return c.json({ error: "unauthenticated" }, 401);
-    return c.json({ username });
+    return c.json({ username, isAdmin: membership.isAdmin(username) });
   });
 
   app.get("/api/tweets", (c) => {
@@ -200,7 +207,57 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ contributors: store.contributors() });
   });
 
+  app.get("/api/admin/pool", (c) => {
+    const username = adminUser(c);
+    if (username instanceof Response) return username;
+    return c.json({ pool: membership.snapshot(), viewer: { username } });
+  });
+
+  app.put("/api/admin/members/:username", async (c) => {
+    const actor = adminUser(c);
+    if (actor instanceof Response) return actor;
+    try {
+      return c.json({ pool: await membership.addMember(actor, c.req.param("username")) });
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 400);
+    }
+  });
+
+  app.delete("/api/admin/members/:username", async (c) => {
+    const actor = adminUser(c);
+    if (actor instanceof Response) return actor;
+    try {
+      return c.json({ pool: await membership.removeMember(actor, c.req.param("username")) });
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 400);
+    }
+  });
+
+  app.put("/api/admin/admins/:username", async (c) => {
+    const actor = adminUser(c);
+    if (actor instanceof Response) return actor;
+    try {
+      return c.json({ pool: await membership.addAdmin(actor, c.req.param("username")) });
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 400);
+    }
+  });
+
+  app.delete("/api/admin/admins/:username", async (c) => {
+    const actor = adminUser(c);
+    if (actor instanceof Response) return actor;
+    try {
+      return c.json({ pool: await membership.removeAdmin(actor, c.req.param("username")) });
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 400);
+    }
+  });
+
   return app;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "request failed";
 }
 
 function splitStateCookie(cookie: string): [string, string] {

@@ -37,6 +37,20 @@ function stubApi(responses: Record<string, () => Response>): ReturnType<typeof v
   return fetchMock;
 }
 
+function poolResponse(members: readonly string[]): Response {
+  return Response.json({
+    pool: {
+      version: 1,
+      admins: ["osolmaz"],
+      members,
+      bootstrap_admins: ["osolmaz"],
+      updated_at: "2026-07-06T00:00:00.000Z",
+      source: "dataset",
+    },
+    viewer: { username: "osolmaz" },
+  });
+}
+
 describe("App", () => {
   it("shows the sign-in screen when unauthenticated", async () => {
     stubApi({ "/api/me": () => new Response("no", { status: 401 }) });
@@ -47,7 +61,7 @@ describe("App", () => {
 
   it("renders the feed and filters when signed in", async () => {
     stubApi({
-      "/api/me": () => Response.json({ username: "osolmaz" }),
+      "/api/me": () => Response.json({ username: "osolmaz", isAdmin: false }),
       "/api/contributors": () =>
         Response.json({
           contributors: [
@@ -68,7 +82,7 @@ describe("App", () => {
   it("loads the next page via the load-more button", async () => {
     let call = 0;
     stubApi({
-      "/api/me": () => Response.json({ username: "osolmaz" }),
+      "/api/me": () => Response.json({ username: "osolmaz", isAdmin: false }),
       "/api/contributors": () => Response.json({ contributors: [] }),
       "/api/tweets": () => {
         call += 1;
@@ -94,11 +108,38 @@ describe("App", () => {
 
   it("surfaces feed errors", async () => {
     stubApi({
-      "/api/me": () => Response.json({ username: "osolmaz" }),
+      "/api/me": () => Response.json({ username: "osolmaz", isAdmin: false }),
       "/api/contributors": () => Response.json({ contributors: [] }),
       "/api/tweets": () => new Response("boom", { status: 500 }),
     });
     render(<App />);
     await screen.findByText(/request failed: 500/);
+  });
+
+  it("lets admins add pool members", async () => {
+    const routes: Record<string, (init?: RequestInit) => Response> = {
+      "/api/me": () => Response.json({ username: "osolmaz", isAdmin: true }),
+      "/api/contributors": () => Response.json({ contributors: [] }),
+      "/api/tweets": () => Response.json({ records: [] }),
+      "/api/admin/pool": () => poolResponse(["osolmaz"]),
+      "/api/admin/members/alice": (init) =>
+        init?.method === "PUT"
+          ? poolResponse(["alice", "osolmaz"])
+          : new Response("missing", { status: 404 }),
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const path = url.split("?")[0] ?? url;
+      return Promise.resolve(routes[path]?.(init) ?? new Response("missing", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByText("Admin"));
+    fireEvent.change(await screen.findByLabelText("Member username"), {
+      target: { value: "alice" },
+    });
+    fireEvent.click(screen.getByText("Add member"));
+    await screen.findByText("@alice");
   });
 });

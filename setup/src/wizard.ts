@@ -74,11 +74,13 @@ async function promptConfig(username: string): Promise<SetupConfig> {
     usersValue(defaults.allowedUsers),
     validateUserList,
   );
+  const admins = await promptText("Pool admins", usersValue(defaults.poolAdmins), validateUserList);
   return {
     namespace,
     spaceRepo,
     datasetRepo,
     allowedUsers: normalizeUsers(allowed),
+    poolAdmins: normalizeUsers(admins),
   };
 }
 
@@ -88,6 +90,7 @@ async function confirmPlan(config: SetupConfig): Promise<void> {
       `Space: ${config.spaceRepo}`,
       `Dataset: ${config.datasetRepo}`,
       `Allowed users: ${usersValue(config.allowedUsers)}`,
+      `Pool admins: ${usersValue(config.poolAdmins)}`,
     ].join("\n"),
     "Plan",
   );

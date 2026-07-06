@@ -101,6 +101,24 @@ export class DatasetMirror {
     return { files: paths.length, tweets };
   }
 
+  /** Read a dataset file through the Hub, returning undefined when it is absent. */
+  async readText(path: string): Promise<string | undefined> {
+    try {
+      return await this.hub.downloadFile(path);
+    } catch (error) {
+      if (isNotFound(error) || String(error).includes(`missing: ${path}`)) return undefined;
+      throw error;
+    }
+  }
+
+  /** Commit one metadata file and update the local mirror after the commit succeeds. */
+  async writeTextAndCommit(path: string, content: string, title: string): Promise<void> {
+    await this.hub.commitFiles([{ path, content }], title);
+    const local = this.localPath(path);
+    mkdirSync(dirname(local), { recursive: true });
+    writeFileSync(local, content);
+  }
+
   /**
    * Append accepted tweets to their contributors' daily files and commit the
    * result to the Hub. The mirror is only updated after the commit succeeds.
