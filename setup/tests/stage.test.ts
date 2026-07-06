@@ -59,6 +59,7 @@ describe("space staging helpers", () => {
           cwd: repo,
         },
       );
+      await writeFile(join(repo, "setup", "package.json"), '{"dirty":true}');
 
       await createSpaceStage(repo, stage);
 

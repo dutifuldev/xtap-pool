@@ -17,6 +17,7 @@ export async function createSpaceStage(root: string, stageDir: string): Promise<
   await captureCommand("git", ["-C", root, "archive", "--format=tar", "-o", archivePath, "HEAD"]);
   await inheritCommand("tar", ["-xf", archivePath, "-C", stageDir]);
   await fs.rm(archivePath, { force: true });
+  const setupPackageJson = await fs.readFile(join(stageDir, "setup", "package.json"));
   await fs.copyFile(join(root, "space", "hf-space-README.md"), join(stageDir, "README.md"));
   await Promise.all(
     [...SPACE_EXCLUDED_ROOTS].map((name) =>
@@ -24,7 +25,7 @@ export async function createSpaceStage(root: string, stageDir: string): Promise<
     ),
   );
   await fs.mkdir(join(stageDir, "setup"), { recursive: true });
-  await fs.copyFile(join(root, "setup", "package.json"), join(stageDir, "setup", "package.json"));
+  await fs.writeFile(join(stageDir, "setup", "package.json"), setupPackageJson);
 }
 
 export async function collectUploadFiles(root: string): Promise<readonly UploadFile[]> {

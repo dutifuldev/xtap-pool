@@ -40,8 +40,8 @@ export async function runSetupWizard(root: string): Promise<void> {
   await deployPool(root, { accessToken }, config);
   task.stop("Space deployed");
   const datasetToken = await promptDatasetToken(config.datasetRepo);
-  await setSpaceSecret({ accessToken }, config.spaceRepo, "HF_TOKEN", datasetToken);
   await maybeSeed(root, config);
+  await setSpaceSecret({ accessToken }, config.spaceRepo, "HF_TOKEN", datasetToken);
   outro(`Done. Explorer: ${spacePublicUrl(config.spaceRepo)}`);
 }
 
