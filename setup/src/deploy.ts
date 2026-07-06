@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createRepo, repoExists, uploadFiles } from "@huggingface/hub";
+import { commit, createRepo, listFiles, repoExists } from "@huggingface/hub";
 
 import type { SetupConfig } from "./config.js";
 import { usersValue } from "./config.js";
@@ -16,6 +16,8 @@ import {
 } from "./hub-api.js";
 import { captureCommand } from "./process.js";
 import { collectUploadFiles, createSpaceStage } from "./stage.js";
+
+type DeleteOperation = { operation: "delete"; path: string };
 
 export async function deployPool(
   root: string,
@@ -52,7 +54,7 @@ async function ensureRepo(
   const exists = await repoExists({
     repo,
     accessToken: client.accessToken,
-    ...fetchOption(client),
+    ...hubOptions(client),
   });
   if (exists) {
     await assertRepoVisibility(client, repo, visibility);
@@ -63,7 +65,7 @@ async function ensureRepo(
     accessToken: client.accessToken,
     visibility,
     ...(repo.type === "space" ? { sdk: "docker" as const } : {}),
-    ...fetchOption(client),
+    ...hubOptions(client),
   });
 }
 
@@ -84,16 +86,49 @@ async function uploadSpace(root: string, client: HubClient, spaceRepo: string): 
   const stageDir = await mkdtemp(join(tmpdir(), "xtap-pool-space-"));
   try {
     await createSpaceStage(root, stageDir);
-    await uploadFiles({
+    const files = await collectUploadFiles(stageDir);
+    const staleDeletes = await collectStaleSpaceDeletes(
+      client,
+      spaceRepo,
+      files.map((file) => file.path),
+    );
+    await commit({
       repo: { type: "space", name: spaceRepo },
       accessToken: client.accessToken,
-      files: [...(await collectUploadFiles(stageDir))],
-      commitTitle: `deploy: ${await shortHead(root)}`,
-      ...fetchOption(client),
+      title: `deploy: ${await shortHead(root)}`,
+      operations: [
+        ...files.map((file) => ({
+          operation: "addOrUpdate" as const,
+          path: file.path,
+          content: file.content,
+        })),
+        ...staleDeletes,
+      ],
+      ...hubOptions(client),
     });
   } finally {
     await rm(stageDir, { recursive: true, force: true });
   }
+}
+
+export async function collectStaleSpaceDeletes(
+  client: HubClient,
+  spaceRepo: string,
+  stagedPaths: readonly string[],
+): Promise<readonly DeleteOperation[]> {
+  const desired = new Set(stagedPaths);
+  const deletes: DeleteOperation[] = [];
+  for await (const entry of listFiles({
+    repo: { type: "space", name: spaceRepo },
+    accessToken: client.accessToken,
+    recursive: true,
+    ...hubOptions(client),
+  })) {
+    if (entry.type === "file" && entry.path !== ".gitattributes" && !desired.has(entry.path)) {
+      deletes.push({ operation: "delete", path: entry.path });
+    }
+  }
+  return deletes;
 }
 
 async function shortHead(root: string): Promise<string> {
@@ -105,6 +140,9 @@ function randomSecret(): string {
   return randomBytes(32).toString("hex");
 }
 
-function fetchOption(client: HubClient): { fetch?: typeof fetch } {
-  return client.fetchFn === undefined ? {} : { fetch: client.fetchFn };
+function hubOptions(client: HubClient): { fetch?: typeof fetch; hubUrl?: string } {
+  return {
+    ...(client.fetchFn === undefined ? {} : { fetch: client.fetchFn }),
+    ...(client.hubUrl === undefined ? {} : { hubUrl: client.hubUrl }),
+  };
 }
