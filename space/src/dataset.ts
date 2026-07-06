@@ -24,6 +24,15 @@ function isNotFound(error: unknown): boolean {
   );
 }
 
+function isMissingDatasetFile(error: unknown, path: string): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    isNotFound(error) ||
+    message.includes(`missing: ${path}`) ||
+    message.includes(`dataset file not found: ${path}`)
+  );
+}
+
 export function createHubClient(datasetRepo: string, accessToken: string): HubClient {
   const repo = { type: "dataset", name: datasetRepo } as const;
   return {
@@ -99,6 +108,24 @@ export class DatasetMirror {
       tweets += parsed.length;
     }
     return { files: paths.length, tweets };
+  }
+
+  /** Read a dataset file through the Hub, returning undefined when it is absent. */
+  async readText(path: string): Promise<string | undefined> {
+    try {
+      return await this.hub.downloadFile(path);
+    } catch (error) {
+      if (isMissingDatasetFile(error, path)) return undefined;
+      throw error;
+    }
+  }
+
+  /** Commit one metadata file and update the local mirror after the commit succeeds. */
+  async writeTextAndCommit(path: string, content: string, title: string): Promise<void> {
+    await this.hub.commitFiles([{ path, content }], title);
+    const local = this.localPath(path);
+    mkdirSync(dirname(local), { recursive: true });
+    writeFileSync(local, content);
   }
 
   /**

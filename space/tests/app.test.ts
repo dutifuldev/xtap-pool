@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { DatasetMirror } from "../src/dataset.js";
 import { Mutex, ingestBatch } from "../src/ingest.js";
+import { PoolMembership } from "../src/membership.js";
 import { mintPoolToken } from "../src/pool-token.js";
 import { TweetStore } from "../src/store.js";
 import { FakeHub, makeTweet, testConfig } from "./helpers.js";
@@ -19,6 +20,7 @@ let dir: string;
 let hub: FakeHub;
 let store: TweetStore;
 let app: Hono;
+let membership: PoolMembership;
 
 function sessionCookie(username: string): string {
   return `xtap_pool_session=${mintPoolToken(testConfig.sessionSecret, username, FUTURE)}`;
@@ -28,15 +30,22 @@ function bearer(username: string): string {
   return `Bearer ${mintPoolToken(testConfig.poolSigningSecret, username, FUTURE)}`;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "xtap-pool-app-"));
   hub = new FakeHub();
   store = new TweetStore();
   const mirror = new DatasetMirror(hub, dir);
+  membership = await PoolMembership.load({
+    mirror,
+    bootstrapMembers: testConfig.allowedUsers,
+    bootstrapAdmins: testConfig.poolAdmins,
+    now: () => NOW,
+  });
   const mutex = new Mutex();
   app = createApp({
     config: testConfig,
     store,
+    membership,
     now: () => NOW,
     ingest: (username, payload) =>
       mutex.run(() => ingestBatch({ store, mirror, now: () => NOW }, username, payload)),
@@ -127,11 +136,12 @@ describe("session-guarded reads", () => {
 
     await expect((await app.request("/api/me", { headers })).json()).resolves.toEqual({
       username: "osolmaz",
+      isAdmin: true,
     });
     const viaBearer = await app.request("/api/me", {
       headers: { authorization: bearer("alice") },
     });
-    await expect(viaBearer.json()).resolves.toEqual({ username: "alice" });
+    await expect(viaBearer.json()).resolves.toEqual({ username: "alice", isAdmin: false });
   });
 
   it("rejects invalid query parameters", async () => {
@@ -168,6 +178,7 @@ describe("oauth + connect flow", () => {
     const oauthApp = createApp({
       config: testConfig,
       store,
+      membership,
       now: () => NOW,
       ingest: () => Promise.resolve({ ok: true, added: 0, duplicates: 0, rejected: [] }),
       oauthFetch,
@@ -199,6 +210,7 @@ describe("oauth + connect flow", () => {
     const oauthApp = createApp({
       config: testConfig,
       store,
+      membership,
       now: () => NOW,
       ingest: () => Promise.resolve({ ok: true, added: 0, duplicates: 0, rejected: [] }),
       oauthFetch,
@@ -226,5 +238,73 @@ describe("oauth + connect flow", () => {
       body: JSON.stringify({ tweets: [makeTweet()] }),
     });
     expect(ingestResponse.status).toBe(200);
+  });
+});
+
+describe("admin pool management", () => {
+  it("requires a signed-in admin", async () => {
+    expect((await app.request("/api/admin/pool")).status).toBe(401);
+    expect(
+      (await app.request("/api/admin/pool", { headers: { cookie: sessionCookie("alice") } }))
+        .status,
+    ).toBe(403);
+  });
+
+  it("adds and removes members without a Space restart", async () => {
+    const adminHeaders = { cookie: sessionCookie("osolmaz") };
+    const added = await app.request("/api/admin/members/mallory", {
+      method: "PUT",
+      headers: adminHeaders,
+    });
+    expect(added.status).toBe(200);
+    expect(hub.files.get("config/pool.json")).toContain("mallory");
+    expect(
+      (
+        await app.request("/api/ingest", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: bearer("mallory") },
+          body: JSON.stringify({ tweets: [makeTweet()] }),
+        })
+      ).status,
+    ).toBe(200);
+
+    const removed = await app.request("/api/admin/members/mallory", {
+      method: "DELETE",
+      headers: adminHeaders,
+    });
+    expect(removed.status).toBe(200);
+    expect(
+      (
+        await app.request("/api/ingest", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: bearer("mallory") },
+          body: JSON.stringify({ tweets: [makeTweet({ id: "2" })] }),
+        })
+      ).status,
+    ).toBe(401);
+  });
+
+  it("promotes and demotes admins with lockout protection", async () => {
+    const adminHeaders = { cookie: sessionCookie("osolmaz") };
+    const promoted = await app.request("/api/admin/admins/alice", {
+      method: "PUT",
+      headers: adminHeaders,
+    });
+    expect(promoted.status).toBe(200);
+    await expect(promoted.json()).resolves.toMatchObject({
+      pool: { admins: ["alice", "osolmaz"] },
+    });
+
+    const demoted = await app.request("/api/admin/admins/alice", {
+      method: "DELETE",
+      headers: adminHeaders,
+    });
+    expect(demoted.status).toBe(200);
+
+    const bootstrapDemote = await app.request("/api/admin/admins/osolmaz", {
+      method: "DELETE",
+      headers: adminHeaders,
+    });
+    expect(bootstrapDemote.status).toBe(400);
   });
 });

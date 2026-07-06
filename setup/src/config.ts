@@ -3,6 +3,7 @@ export type SetupConfig = {
   spaceRepo: string;
   datasetRepo: string;
   allowedUsers: readonly string[];
+  poolAdmins: readonly string[];
 };
 
 const REPO_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -14,6 +15,7 @@ export function defaultSetupConfig(username: string): SetupConfig {
     spaceRepo: `${username}/xtap-pool`,
     datasetRepo: `${username}/xtap-pool-data`,
     allowedUsers: [username],
+    poolAdmins: [username],
   };
 }
 

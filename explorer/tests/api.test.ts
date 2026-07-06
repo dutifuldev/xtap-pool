@@ -2,9 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   defaultFilters,
+  addPoolAdmin,
+  addPoolMember,
   fetchContributors,
+  fetchAdminPool,
   fetchMe,
   fetchTweets,
+  removePoolAdmin,
+  removePoolMember,
   tweetsQueryString,
 } from "../src/lib/api.js";
 
@@ -44,8 +49,11 @@ describe("tweetsQueryString", () => {
 
 describe("api client", () => {
   it("fetchMe returns the user or undefined on 401", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ username: "osolmaz" })));
-    await expect(fetchMe()).resolves.toEqual({ username: "osolmaz" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ username: "osolmaz", isAdmin: true })),
+    );
+    await expect(fetchMe()).resolves.toEqual({ username: "osolmaz", isAdmin: true });
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("no", { status: 401 })));
     await expect(fetchMe()).resolves.toBeUndefined();
@@ -72,5 +80,32 @@ describe("api client", () => {
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("no", { status: 401 })));
     await expect(fetchContributors()).rejects.toThrow("session expired");
+  });
+
+  it("manages pool membership through admin endpoints", async () => {
+    const pool = {
+      version: 1,
+      admins: ["osolmaz"],
+      members: ["osolmaz"],
+      bootstrap_admins: ["osolmaz"],
+      updated_at: "2026-07-06T00:00:00.000Z",
+      source: "dataset",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(Response.json({ pool, viewer: { username: "osolmaz" } })),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchAdminPool()).resolves.toEqual({ pool, viewer: { username: "osolmaz" } });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(Response.json({ pool }))),
+    );
+    await expect(addPoolMember("alice")).resolves.toEqual(pool);
+    await expect(removePoolMember("alice")).resolves.toEqual(pool);
+    await expect(addPoolAdmin("alice")).resolves.toEqual(pool);
+    await expect(removePoolAdmin("alice")).resolves.toEqual(pool);
   });
 });

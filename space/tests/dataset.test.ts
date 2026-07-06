@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DatasetMirror, parseJsonlTweets } from "../src/dataset.js";
+import type { HubClient } from "../src/dataset.js";
 import { TweetStore } from "../src/store.js";
 import { FakeHub, makePooled, makeTweet } from "./helpers.js";
 
@@ -66,6 +67,19 @@ describe("DatasetMirror.rebuild", () => {
     expect(result).toEqual({ files: 2, tweets: 3 });
     expect(store.count()).toBe(3);
     expect(existsSync(join(dir, "data/alice/2026/05/tweets-2026-05-21.jsonl"))).toBe(true);
+  });
+});
+
+describe("DatasetMirror.readText", () => {
+  it("treats the Hub client's missing-file error as an absent metadata file", async () => {
+    const missingHub: HubClient = {
+      listDataFiles: () => Promise.resolve([]),
+      downloadFile: (path) => Promise.reject(new Error(`dataset file not found: ${path}`)),
+      commitFiles: () => Promise.resolve(),
+    };
+    const freshMirror = new DatasetMirror(missingHub, dir);
+
+    await expect(freshMirror.readText("config/pool.json")).resolves.toBeUndefined();
   });
 });
 

@@ -39,8 +39,11 @@ scripts/deploy-space.sh <namespace>
 scripts/seed-dataset.sh <namespace>/xtap-pool-data <hf-username> ~/Downloads/xtap
 ```
 
-Add friends by putting their HF usernames in the Space's `ALLOWED_USERS`
-variable — no repo permissions, no org membership needed.
+After setup, admins manage pool users from the Space's **Admin** tab. The Space
+stores membership in `config/pool.json` inside the private dataset repo, so
+adding friends does not require CLI access, repo permissions, org membership, or
+a Space restart. `ALLOWED_USERS` and `POOL_ADMINS` remain bootstrap/recovery
+variables for first setup and break-glass access.
 
 ## Join a pool (each friend)
 

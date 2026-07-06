@@ -11,6 +11,7 @@ export const testConfig: SpaceConfig = {
   poolSigningSecret: "pool-secret-0123456789abcdef0123456789abcdef",
   sessionSecret: "session-secret-0123456789abcdef0123456789ab",
   allowedUsers: ["osolmaz", "alice"],
+  poolAdmins: ["osolmaz"],
   oauthClientId: "client-id",
   oauthClientSecret: "client-secret",
   openidProviderUrl: "https://huggingface.co",
@@ -47,7 +48,9 @@ export class FakeHub implements HubClient {
   failNextCommit = false;
 
   listDataFiles(): Promise<string[]> {
-    return Promise.resolve([...this.files.keys()]);
+    return Promise.resolve(
+      [...this.files.keys()].filter((path) => path.startsWith("data/") && path.endsWith(".jsonl")),
+    );
   }
 
   downloadFile(path: string): Promise<string> {

@@ -19,6 +19,7 @@ describe("setup config helpers", () => {
       spaceRepo: "alice/xtap-pool",
       datasetRepo: "alice/xtap-pool-data",
       allowedUsers: ["alice"],
+      poolAdmins: ["alice"],
     });
   });
 
