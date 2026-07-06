@@ -2,7 +2,7 @@
 
 This directory vendors the xTap Chrome extension.
 
-- Upstream: https://github.com/osolmaz/xTap
+- Upstream: https://github.com/mkubicek/xTap
 - Vendored at commit: `61c1cb483fff90a9aa48588621a9f8ee03bddf1f`
 - License: MIT (see `LICENSE`, unchanged)
 

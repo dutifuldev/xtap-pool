@@ -2,7 +2,7 @@
 
 ## Problem
 
-A group of friends each run [xTap](https://github.com/osolmaz/xTap) (a Chrome
+A group of friends each run [xTap](https://github.com/mkubicek/xTap) (a Chrome
 MV3 extension that passively captures X/Twitter tweets from GraphQL responses
 into daily JSONL files). We want to pool everyone's captures in one private,
 centralized place where:
@@ -135,7 +135,7 @@ power use; not required for any flow.
 
 ### `extension/` — vendored xTap fork
 
-- Vendor `osolmaz/xTap` at a pinned commit; record SHA + local modifications
+- Vendor `mkubicek/xTap` at a pinned commit; record SHA + local modifications
   in `extension/VENDORED.md`. Keep upstream MIT `LICENSE` in place. Diet:
   keep everything (incl. native host + daemon for local saving); rename
   extension to "xtap-pool", new icons deferred.

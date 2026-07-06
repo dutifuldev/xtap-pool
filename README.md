@@ -1,6 +1,6 @@
 # xtap-pool
 
-Pool [xTap](https://github.com/osolmaz/xTap) captures with a group of friends.
+Pool [xTap](https://github.com/mkubicek/xTap) captures with a group of friends.
 
 xtap-pool is three pieces in one repo:
 
