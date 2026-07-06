@@ -13,8 +13,11 @@ DATASET_REPO="${1:?dataset repo, e.g. osolmaz/xtap-pool-data}"
 USERNAME="${2:?hf username the seed data belongs to}"
 SOURCE_DIR="${3:?source dir, e.g. ~/Downloads/xtap}"
 
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
+WORK="$(mktemp -d)"
+STAGE="$WORK/stage"
+trap 'rm -rf "$WORK"' EXIT
+
+mkdir -p "$STAGE"
 
 if [[ ! -d "$SOURCE_DIR" ]]; then
   echo "source directory does not exist: $SOURCE_DIR" >&2
@@ -29,10 +32,21 @@ while IFS= read -r -d '' file; do
   year="${day:0:4}"
   month="${day:5:2}"
   target="$STAGE/data/$USERNAME/$year/$month/$name"
+  dataset_path="data/$USERNAME/$year/$month/$name"
+  if [[ -e "$target" ]]; then
+    echo "duplicate daily xTap file maps to $dataset_path: $file" >&2
+    echo "choose a narrower source directory or merge the duplicate day before importing" >&2
+    exit 1
+  fi
   mkdir -p "$(dirname "$target")"
   cp "$file" "$target"
   COUNT=$((COUNT + 1))
-done < <(find "$SOURCE_DIR" -type f -name 'tweets-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].jsonl' -print0)
+done < <(
+  find "$SOURCE_DIR" \
+    -type f \
+    -name 'tweets-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].jsonl' \
+    -print0
+)
 
 if [[ "$COUNT" -eq 0 ]]; then
   echo "no tweets-YYYY-MM-DD.jsonl files found under $SOURCE_DIR" >&2
@@ -42,4 +56,4 @@ fi
 echo "==> Uploading $COUNT daily files to $DATASET_REPO as data/$USERNAME/"
 hf upload "$DATASET_REPO" "$STAGE" . --repo-type dataset \
   --commit-message "seed: $USERNAME xTap output"
-echo "==> Done. Restart the Space to rebuild its index."
+echo "==> Done. If the Space is already running, restart it to rebuild its index."
