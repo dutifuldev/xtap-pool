@@ -13,7 +13,23 @@ type AuthState =
 
 type View = "feed" | "install" | "admin";
 
+const INSTALL_COMMAND =
+  'rm -rf ~/.local/share/xtap-pool-extension && mkdir -p ~/.local/share/xtap-pool-extension && curl -L https://github.com/dutifuldev/xtap-pool/archive/refs/heads/main.tar.gz | tar -xz --strip-components=2 -C ~/.local/share/xtap-pool-extension xtap-pool-main/extension && open -a "Google Chrome" "chrome://extensions"';
+
 function InstallExtension(): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const copyCommand = (): void => {
+    void navigator.clipboard.writeText(INSTALL_COMMAND).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => {
+          setCopied(false);
+        }, 1500);
+      },
+      () => undefined,
+    );
+  };
+
   return (
     <section className="flex flex-col gap-4 p-4">
       <header className="border-b border-(--x-border) pb-4">
@@ -23,18 +39,20 @@ function InstallExtension(): React.JSX.Element {
         </p>
       </header>
       <p className="text-sm text-(--x-muted)">
-        Download the repo, open <code>chrome://extensions</code>, enable Developer mode, then Load
-        unpacked and choose <code>extension/</code>.
+        Run this on macOS, enable Developer mode in Chrome, then Load unpacked and choose{" "}
+        <code>~/.local/share/xtap-pool-extension</code>.
       </p>
+      <pre className="overflow-x-auto rounded-md border border-(--x-border) bg-(--x-soft) p-3 text-xs leading-5">
+        <code>{INSTALL_COMMAND}</code>
+      </pre>
       <div className="flex flex-wrap gap-2 text-sm">
-        <a
+        <button
           className="rounded-md border border-(--x-border) px-3 py-1.5 font-semibold"
-          href="https://github.com/dutifuldev/xtap-pool"
-          rel="noreferrer"
-          target="_blank"
+          type="button"
+          onClick={copyCommand}
         >
-          Download repo
-        </a>
+          {copied ? "Copied" : "Copy command"}
+        </button>
         <a
           className="rounded-md bg-(--x-accent) px-3 py-1.5 font-semibold text-white"
           href="/connect"
@@ -69,7 +87,6 @@ export function App(): React.JSX.Element {
   const [view, setView] = useState<View>("feed");
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [contributors, setContributors] = useState<readonly ContributorStats[]>([]);
-  const [now] = useState(() => new Date());
   const tabClass = (active: boolean, tone: "default" | "accent" = "default"): string =>
     [
       "rounded-md border px-3 py-1.5 text-sm font-semibold",
@@ -157,7 +174,7 @@ export function App(): React.JSX.Element {
         ) : view === "admin" && auth.isAdmin ? (
           <AdminPanel />
         ) : (
-          <Feed filters={filters} now={now} />
+          <Feed filters={filters} />
         )}
       </main>
     </div>

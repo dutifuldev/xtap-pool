@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../src/App.js";
@@ -23,6 +23,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function stubApi(responses: Record<string, () => Response>): ReturnType<typeof vi.fn> {
@@ -90,10 +91,44 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByText("Install"));
     await screen.findByText("Install extension");
-    expect(screen.getByText("Download repo").getAttribute("href")).toBe(
-      "https://github.com/dutifuldev/xtap-pool",
-    );
+    expect(screen.getByText("Copy command")).toBeDefined();
+    expect(screen.getByText(/xtap-pool-main\/extension/)).toBeDefined();
+    expect(screen.getByText("~/.local/share/xtap-pool-extension")).toBeDefined();
     expect(screen.getByText("Connect").getAttribute("href")).toBe("/connect");
+  });
+
+  it("refreshes relative timestamps while the feed is visible", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-06T12:00:00.000Z"));
+    stubApi({
+      "/api/me": () => Response.json({ username: "osolmaz", isAdmin: false }),
+      "/api/contributors": () => Response.json({ contributors: [] }),
+      "/api/tweets": () =>
+        Response.json({
+          records: [
+            {
+              tweet: pooledTweet({
+                created_at: "2026-07-06T11:59:01.000Z",
+                captured_at: "2026-07-06T11:59:01.000Z",
+              }),
+              contributors: [],
+            },
+          ],
+        }),
+    });
+    render(<App />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("hello world")).toBeDefined();
+    expect(screen.getByText("now")).toBeDefined();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1200);
+    });
+
+    expect(screen.getByText("1m")).toBeDefined();
   });
 
   it("loads the next page via the load-more button", async () => {

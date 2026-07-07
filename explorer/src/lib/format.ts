@@ -38,6 +38,8 @@ function trimZero(value: string): string {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const REFRESH_FUZZ_MS = 100;
+const MIN_REFRESH_DELAY_MS = 1000;
 
 function relativeLabel(ageMs: number): string | undefined {
   if (ageMs < 0) return undefined;
@@ -57,6 +59,22 @@ export function formatTweetDate(iso: string, now: Date): string {
   return date.getUTCFullYear() === now.getUTCFullYear()
     ? label
     : `${label}, ${String(date.getUTCFullYear())}`;
+}
+
+function refreshDelay(boundaryMs: number): number {
+  return Math.max(MIN_REFRESH_DELAY_MS, Math.ceil(boundaryMs) + REFRESH_FUZZ_MS);
+}
+
+/** Milliseconds until formatTweetDate can change, or undefined for stable absolute dates. */
+export function nextTweetDateRefreshDelay(iso: string, now: Date): number | undefined {
+  const date = new Date(iso);
+  const ageMs = now.getTime() - date.getTime();
+  if (!Number.isFinite(ageMs)) return undefined;
+  if (ageMs < 0) return refreshDelay(-ageMs);
+  if (ageMs < 60_000) return refreshDelay(60_000 - ageMs);
+  if (ageMs < 3_600_000) return refreshDelay(60_000 - (ageMs % 60_000));
+  if (ageMs < 86_400_000) return refreshDelay(3_600_000 - (ageMs % 3_600_000));
+  return undefined;
 }
 
 export type PhotoMedia = { url: string; alt: string };

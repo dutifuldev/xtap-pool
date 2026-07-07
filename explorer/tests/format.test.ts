@@ -7,6 +7,7 @@ import {
   formatTweetDate,
   isArticleTweet,
   isRetweet,
+  nextTweetDateRefreshDelay,
   photoMedia,
   quotedTweetUrl,
   tokenizeTweetText,
@@ -54,6 +55,13 @@ describe("formatTweetDate", () => {
     expect(formatTweetDate("2026-07-06T02:00:00.000Z", NOW)).toBe("10h");
     expect(formatTweetDate("2026-05-21T03:04:35.954Z", NOW)).toBe("May 21");
     expect(formatTweetDate("2024-12-31T00:00:00.000Z", NOW)).toBe("Dec 31, 2024");
+  });
+
+  it("returns when relative labels need to refresh", () => {
+    expect(nextTweetDateRefreshDelay("2026-07-06T11:59:30.000Z", NOW)).toBe(30_100);
+    expect(nextTweetDateRefreshDelay("2026-07-06T11:15:45.000Z", NOW)).toBe(45_100);
+    expect(nextTweetDateRefreshDelay("2026-07-06T02:30:00.000Z", NOW)).toBe(1_800_100);
+    expect(nextTweetDateRefreshDelay("2026-05-21T03:04:35.954Z", NOW)).toBeUndefined();
   });
 });
 

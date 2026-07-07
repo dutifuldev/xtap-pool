@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Filters, TweetPage, TweetRecord } from "../lib/api.js";
 import { fetchTweets } from "../lib/api.js";
+import { nextTweetDateRefreshDelay } from "../lib/format.js";
 import { TweetCard } from "./TweetCard.js";
 
 export type FeedProps = {
   filters: Filters;
-  now: Date;
 };
 
 type FeedState = {
@@ -16,10 +16,52 @@ type FeedState = {
   error?: string;
 };
 
+function nextFeedRefreshDelay(records: readonly TweetRecord[], now: Date): number | undefined {
+  let next: number | undefined;
+  for (const record of records) {
+    const delay = nextTweetDateRefreshDelay(
+      record.tweet.created_at ?? record.tweet.captured_at,
+      now,
+    );
+    if (delay !== undefined && (next === undefined || delay < next)) next = delay;
+  }
+  return next;
+}
+
+function useFeedClock(records: readonly TweetRecord[]): Date {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const delay = nextFeedRefreshDelay(records, now);
+    if (delay === undefined) return;
+    const timeout = window.setTimeout(() => {
+      setNow(new Date());
+    }, delay);
+    return (): void => {
+      window.clearTimeout(timeout);
+    };
+  }, [records, now]);
+
+  useEffect(() => {
+    const refresh = (): void => {
+      if (document.visibilityState === "visible") setNow(new Date());
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return (): void => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
+  return now;
+}
+
 /** Infinite-scrolling tweet feed for the active filters. */
-export function Feed({ filters, now }: FeedProps): React.JSX.Element {
+export function Feed({ filters }: FeedProps): React.JSX.Element {
   const [state, setState] = useState<FeedState>({ records: [], loading: true });
   const generation = useRef(0);
+  const now = useFeedClock(state.records);
 
   const load = useCallback(
     async (cursor: string | undefined, previous: readonly TweetRecord[]): Promise<void> => {
